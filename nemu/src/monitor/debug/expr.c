@@ -10,7 +10,10 @@
 enum {
 	NOTYPE = 256,
 	EQ, NEQ, AND, OR, NOT,
-	TK_DEC, TK_HEX, TK_REG
+	TK_DEC, TK_HEX, TK_REG,
+	NEG, TK_DEREF
+
+	/* TODO: Add more token types */
 
 };
 
@@ -19,8 +22,11 @@ static struct rule {
 	int token_type;
 } rules[] = {
 
-	/* 长的token要放在短的前面, 比如==要放在=之类的前面,
-	 * 0x开头的十六进制要放在十进制前面, 不然0xc0100000会被拆开 */
+	/* Add more rules.
+	 * Pay attention to the precedence level of different rules:
+	 * longer tokens must come before their prefixes.
+	 */
+
 	{" +",	NOTYPE},				// spaces
 	{"0[xX][0-9a-fA-F]+",	TK_HEX},	// hexadecimal number
 	{"[0-9]+",	TK_DEC},			// decimal number
@@ -30,9 +36,9 @@ static struct rule {
 	{"&&",	AND},					// logical and
 	{"\\|\\|",	OR},				// logical or
 	{"!",	NOT},					// logical not
-	{"\\*",	'*'},					// multiply
+	{"\\*",	'*'},					// multiply or dereference
 	{"\\+",	'+'},					// plus
-	{"-",	'-'},					// minus
+	{"-",	'-'},					// minus or negative
 	{"/",	'/'},					// divide
 	{"\\(",	'('},					// left paren
 	{"\\)",	')'}					// right paren
@@ -84,17 +90,18 @@ static bool make_token(char *e) {
 				Log("match rules[%d] = \"%s\" at position %d with len %d: %.*s", i, rules[i].regex, position, substr_len, substr_len, substr_start);
 				position += substr_len;
 
-				/* a new token is recognized, record it in tokens[] */
-				if(nr_token >= 32) { assert(0); }
+				/* A new token is recognized with rules[i]. Record it
+				 * in the array `tokens'. */
+				Assert(nr_token < 32, "too many tokens in one expression");
 
 				switch(rules[i].token_type) {
 					case NOTYPE:
-						/* spaces are skipped */
+						/* skip spaces */
 						break;
 
 					case TK_DEC:
 					case TK_HEX:
-						if(substr_len >= 32) { assert(0); }
+						Assert(substr_len < 32, "number token is too long");
 						memcpy(tokens[nr_token].str, substr_start, substr_len);
 						tokens[nr_token].str[substr_len] = '\0';
 						tokens[nr_token].type = rules[i].token_type;
@@ -103,10 +110,10 @@ static bool make_token(char *e) {
 
 					case TK_REG: {
 						int j;
-						if(substr_len >= 32) { assert(0); }
+						Assert(substr_len < 32, "register name is too long");
 						for(j = 0; j < substr_len; j ++) {
 							char c = substr_start[j];
-							/* 转成小写, 这样$EAX和$eax都能认 */
+							/* make the name case-insensitive */
 							tokens[nr_token].str[j] = (c >= 'A' && c <= 'Z') ? (c - 'A' + 'a') : c;
 						}
 						tokens[nr_token].str[substr_len] = '\0';
@@ -134,8 +141,9 @@ static bool make_token(char *e) {
 	return true;
 }
 
-/* check whether tokens[p..q] is surrounded by a matched pair of
- * parentheses, e.g. "( 2 - 1 )" is true, "4 + 3 * ( 2 - 1 )" is false */
+/* check_parentheses(p, q) returns true only when tokens[p..q] is
+ * legal and entirely surrounded by one pair of matching parentheses,
+ * e.g. "( 2 - 1 )" is true while "4 + 3 * ( 2 - 1 )" is false. */
 static bool check_parentheses(int p, int q) {
 	if(tokens[p].type != '(' || tokens[q].type != ')') {
 		return false;
@@ -151,12 +159,12 @@ static bool check_parentheses(int p, int q) {
 			if(par == 0) { return (i == q); }
 		}
 	}
-	/* unbalanced */
+	/* unbalanced parentheses */
 	return false;
 }
 
-/* precedence of binary operators, larger means higher,
- * return -1 if type is not a binary operator */
+/* precedence of binary operators, larger means higher;
+ * return -1 for non-binary-operator tokens */
 static int prec(int type) {
 	switch(type) {
 		case '*': case '/': return 4;
@@ -168,7 +176,7 @@ static int prec(int type) {
 	}
 }
 
-/* name is like "$eax" */
+/* name is a token string like "$eax" */
 static uint32_t reg_value(const char *name, bool *success) {
 	int i;
 	for(i = R_EAX; i <= R_EDI; i ++) {
@@ -190,7 +198,7 @@ static uint32_t eval(int p, int q, bool *success) {
 	if(*success == false) { return 0; }
 
 	if(p > q) {
-		/* bad expression */
+		/* bad expression, e.g. "( 1 + 2 )" with an empty sub-expression */
 		*success = false;
 		return 0;
 	}
@@ -207,11 +215,13 @@ static uint32_t eval(int p, int q, bool *success) {
 	}
 
 	if(check_parentheses(p, q) == true) {
+		/* the expression is surrounded by a matched pair of parentheses */
 		return eval(p + 1, q - 1, success);
 	}
 
-	/* find the dominant operator: the binary operator with the lowest
-	 * precedence out of parentheses, take the rightmost on a tie */
+	/* find the dominant operator: the binary operator with the
+	 * lowest precedence outside all parentheses; on a tie take
+	 * the rightmost one (left associativity) */
 	int op = -1;
 	int par = 0;
 	int i;
@@ -227,11 +237,16 @@ static uint32_t eval(int p, int q, bool *success) {
 	}
 
 	if(op == -1) {
-		/* 没有二元运算符, 可能是单目的! */
-		if(tokens[p].type == NOT) {
+		/* no binary operator: try prefix unary operators
+		 * (negative, dereference, logical not) */
+		if(tokens[p].type == NEG || tokens[p].type == TK_DEREF || tokens[p].type == NOT) {
 			uint32_t val = eval(p + 1, q, success);
 			if(*success == false) { return 0; }
-			return !val;
+			switch(tokens[p].type) {
+				case NEG: return -val;
+				case TK_DEREF: return swaddr_read(val, 4);
+				default: return !val;
+			}
 		}
 		*success = false;
 		return 0;
@@ -265,6 +280,29 @@ uint32_t expr(char *e, bool *success) {
 	if(!make_token(e)) {
 		*success = false;
 		return 0;
+	}
+
+	if(nr_token == 0) {
+		*success = false;
+		return 0;
+	}
+
+	/* distinguish binary '*'/'-' from unary ones:
+	 * they are binary only when the previous token is a number,
+	 * a register, or ')' */
+	int i;
+	for(i = 0; i < nr_token; i ++) {
+		bool val_before = (i > 0) && (tokens[i - 1].type == TK_DEC
+				|| tokens[i - 1].type == TK_HEX
+				|| tokens[i - 1].type == TK_REG
+				|| tokens[i - 1].type == ')');
+
+		if(tokens[i].type == '*' && !val_before) {
+			tokens[i].type = TK_DEREF;
+		}
+		else if(tokens[i].type == '-' && !val_before) {
+			tokens[i].type = NEG;
+		}
 	}
 
 	*success = true;
