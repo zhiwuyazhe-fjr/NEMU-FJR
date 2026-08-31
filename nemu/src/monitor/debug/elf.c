@@ -100,14 +100,28 @@ uint32_t lookup_sym(const char *name, int want_func, bool *success) {
 
 /* find the name of the function that contains addr */
 void func_name(uint32_t addr, char *buf) {
-	int i;
+	int i, best = -1;
 	for(i = 0; i < nr_symtab_entry; i ++) {
 		unsigned char type = symtab[i].st_info & 0xf;
-		if(type == STT_FUNC && symtab[i].st_value <= addr
-				&& addr < symtab[i].st_value + symtab[i].st_size) {
+		if(type != STT_FUNC || symtab[i].st_value > addr) { continue; }
+		if(symtab[i].st_value + symtab[i].st_size > addr) {
+			/* inside the function body */
 			snprintf(buf, 64, "%s", strtab + symtab[i].st_name);
 			return;
 		}
+		/* symbols like _start may have size 0: remember the nearest one below */
+		if(best == -1 || symtab[i].st_value > symtab[best].st_value) { best = i; }
 	}
-	snprintf(buf, 64, "???");
+	if(best == -1) {
+		/* try symbols of any type (e.g. _start is NOTYPE) */
+		for(i = 0; i < nr_symtab_entry; i ++) {
+			if(symtab[i].st_value == 0) { continue; }
+			if(strtab[symtab[i].st_name] == 0) { continue; }  /* skip unnamed symbols */
+			if(symtab[i].st_value <= addr &&
+					(best == -1 || symtab[i].st_value > symtab[best].st_value)) {
+				best = i;
+			}
+		}
+	}
+	snprintf(buf, 64, "%s", best == -1 ? "???" : strtab + symtab[best].st_name);
 }

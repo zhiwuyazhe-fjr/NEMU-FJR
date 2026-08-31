@@ -165,6 +165,24 @@ static int cmd_d(char *args) {
 	return 0;
 }
 
+/* walk the stack frame chain through %ebp */
+static int cmd_bt(char *args) {
+	uint32_t ebp = reg_l(R_EBP);
+	char name[64];
+	int i;
+
+	for(i = 0; ebp != 0 && i < 32; i ++) {
+		uint32_t prev_ebp = swaddr_read(ebp, 4);
+		uint32_t ret_addr = swaddr_read(ebp + 4, 4);
+		func_name(ret_addr - 1, name);
+		printf("#%d 0x%08x in %s (0x%08x, 0x%08x, 0x%08x, 0x%08x)\n", i, ret_addr, name,
+				swaddr_read(ebp + 8, 4), swaddr_read(ebp + 12, 4),
+				swaddr_read(ebp + 16, 4), swaddr_read(ebp + 20, 4));
+		ebp = prev_ebp;
+	}
+	return 0;
+}
+
 static int cmd_help(char *args);
 
 static struct {
@@ -181,6 +199,7 @@ static struct {
 	{ "p", "Evaluate the expression: p EXPR", cmd_p },
 	{ "w", "Set a watchpoint: w EXPR", cmd_w },
 	{ "d", "Delete a watchpoint: d N", cmd_d },
+	{ "bt", "Print the stack frame chain", cmd_bt },
 
 };
 
