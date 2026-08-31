@@ -71,21 +71,53 @@ static int cmd_info(char *args) {
 	return 0;
 }
 
-/* 简化版: 第二个参数只支持十六进制地址 */
 static int cmd_x(char *args) {
-	int n;
-	uint32_t addr;
-	if(args == NULL || sscanf(args, "%d %x", &n, &addr) != 2) {
-		printf("Usage: x N ADDR\n");
+	if(args == NULL) {
+		printf("Usage: x N EXPR\n");
 		return 0;
 	}
 
-	printf("0x%08x:", addr);
+	char *endp;
+	int n = (int)strtoul(args, &endp, 10);
+	if(endp == args || n <= 0) {
+		printf("Usage: x N EXPR\n");
+		return 0;
+	}
+	while(*endp == ' ') { endp ++; }
+	if(*endp == '\0') {
+		printf("Usage: x N EXPR\n");
+		return 0;
+	}
+
+	bool success = false;
+	uint32_t base = expr(endp, &success);
+	if(!success) {
+		printf("bad expression\n");
+		return 0;
+	}
+
+	printf("0x%08x:", base);
 	int i;
 	for(i = 0; i < n; i ++) {
-		printf("  0x%08x", swaddr_read(addr + i * 4, 4));
+		printf("  0x%08x", swaddr_read(base + i * 4, 4));
 	}
 	printf("\n");
+	return 0;
+}
+
+static int cmd_p(char *args) {
+	if(args == NULL) {
+		printf("Usage: p EXPR\n");
+		return 0;
+	}
+
+	bool success = false;
+	uint32_t val = expr(args, &success);
+	if(!success) {
+		printf("bad expression\n");
+		return 0;
+	}
+	printf("0x%08x %u\n", val, val);
 	return 0;
 }
 
@@ -101,7 +133,8 @@ static struct {
 	{ "q", "Exit NEMU", cmd_q },
 	{ "si", "Step N instructions, si [N]", cmd_si },
 	{ "info", "Print registers: info r", cmd_info },
-	{ "x", "Scan memory: x N ADDR", cmd_x },
+	{ "x", "Scan memory: x N EXPR", cmd_x },
+	{ "p", "Evaluate the expression: p EXPR", cmd_p },
 
 };
 
