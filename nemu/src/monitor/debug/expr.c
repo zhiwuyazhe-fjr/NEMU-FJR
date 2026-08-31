@@ -1,3 +1,4 @@
+#include "monitor/monitor.h"
 #include "nemu.h"
 
 /* We use the POSIX regex functions to process regular expressions.
@@ -10,7 +11,7 @@
 enum {
 	NOTYPE = 256,
 	EQ, NEQ, AND, OR, NOT,
-	TK_DEC, TK_HEX, TK_REG,
+	TK_DEC, TK_HEX, TK_REG, TK_VAR,
 	NEG, TK_DEREF
 
 	/* TODO: Add more token types */
@@ -31,6 +32,7 @@ static struct rule {
 	{"0[xX][0-9a-fA-F]+",	TK_HEX},	// hexadecimal number
 	{"[0-9]+",	TK_DEC},			// decimal number
 	{"\\$[a-zA-Z]+",	TK_REG},	// register
+	{"[a-zA-Z_][a-zA-Z0-9_]*",	TK_VAR},	// identifier (variable or function)
 	{"==",	EQ},					// equal
 	{"!=",	NEQ},					// not equal
 	{"&&",	AND},					// logical and
@@ -105,6 +107,14 @@ static bool make_token(char *e) {
 						memcpy(tokens[nr_token].str, substr_start, substr_len);
 						tokens[nr_token].str[substr_len] = '\0';
 						tokens[nr_token].type = rules[i].token_type;
+						nr_token ++;
+						break;
+
+					case TK_VAR:
+						Assert(substr_len < 32, "identifier is too long");
+						memcpy(tokens[nr_token].str, substr_start, substr_len);
+						tokens[nr_token].str[substr_len] = '\0';
+						tokens[nr_token].type = TK_VAR;
 						nr_token ++;
 						break;
 
@@ -208,6 +218,7 @@ static uint32_t eval(int p, int q, bool *success) {
 			case TK_DEC: return strtoul(tokens[p].str, NULL, 10);
 			case TK_HEX: return strtoul(tokens[p].str, NULL, 16);
 			case TK_REG: return reg_value(tokens[p].str, success);
+			case TK_VAR: return lookup_sym(tokens[p].str, 0, success);
 			default:
 				*success = false;
 				return 0;

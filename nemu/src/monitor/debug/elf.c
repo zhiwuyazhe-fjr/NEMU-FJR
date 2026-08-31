@@ -81,3 +81,33 @@ void load_elf_tables(int argc, char *argv[]) {
 	fclose(fp);
 }
 
+
+/* find the symbol with the given name; want_func selects STT_FUNC
+ * or STT_OBJECT symbols, return the symbol's value */
+uint32_t lookup_sym(const char *name, int want_func, bool *success) {
+	int i;
+	for(i = 0; i < nr_symtab_entry; i ++) {
+		unsigned char type = symtab[i].st_info & 0xf;
+		if(type == (want_func ? STT_FUNC : STT_OBJECT)
+				&& strcmp(strtab + symtab[i].st_name, name) == 0) {
+			*success = true;
+			return symtab[i].st_value;
+		}
+	}
+	*success = false;
+	return 0;
+}
+
+/* find the name of the function that contains addr */
+void func_name(uint32_t addr, char *buf) {
+	int i;
+	for(i = 0; i < nr_symtab_entry; i ++) {
+		unsigned char type = symtab[i].st_info & 0xf;
+		if(type == STT_FUNC && symtab[i].st_value <= addr
+				&& addr < symtab[i].st_value + symtab[i].st_size) {
+			snprintf(buf, 64, "%s", strtab + symtab[i].st_name);
+			return;
+		}
+	}
+	snprintf(buf, 64, "???");
+}
