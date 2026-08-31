@@ -53,7 +53,7 @@ static int cmd_info(char *args) {
 	char *arg = strtok(NULL, " ");
 
 	if(arg == NULL) {
-		printf("Usage: info r\n");
+		printf("Usage: info r (registers) or info w (watchpoints)\n");
 		return 0;
 	}
 
@@ -63,6 +63,9 @@ static int cmd_info(char *args) {
 			printf("%s\t0x%08x\t%u\n", regsl[i], reg_l(i), reg_l(i));
 		}
 		printf("eip\t0x%08x\n", cpu.eip);
+	}
+	else if(strcmp(arg, "w") == 0) {
+		print_wp();
 	}
 	else {
 		printf("Unknown argument '%s'\n", arg);
@@ -121,6 +124,47 @@ static int cmd_p(char *args) {
 	return 0;
 }
 
+static int cmd_w(char *args) {
+	if(args == NULL) {
+		printf("Usage: w EXPR\n");
+		return 0;
+	}
+
+	bool success = false;
+	uint32_t val = expr(args, &success);
+	if(!success) {
+		printf("bad expression\n");
+		return 0;
+	}
+
+	WP *wp = new_wp();
+	snprintf(wp->expr, sizeof(wp->expr), "%s", args);
+	wp->old_val = val;
+	printf("Set watchpoint %d: %s = 0x%08x\n", wp->NO, wp->expr, val);
+	return 0;
+}
+
+static int cmd_d(char *args) {
+	if(args == NULL) {
+		printf("Usage: d N\n");
+		return 0;
+	}
+
+	int no;
+	if(sscanf(args, "%d", &no) != 1) {
+		printf("Usage: d N\n");
+		return 0;
+	}
+
+	WP *target = find_wp(no);
+	if(target == NULL) {
+		printf("No watchpoint number %d\n", no);
+		return 0;
+	}
+	free_wp(target);
+	return 0;
+}
+
 static int cmd_help(char *args);
 
 static struct {
@@ -132,9 +176,11 @@ static struct {
 	{ "c", "Continue the execution of the program", cmd_c },
 	{ "q", "Exit NEMU", cmd_q },
 	{ "si", "Step N instructions, si [N]", cmd_si },
-	{ "info", "Print registers: info r", cmd_info },
+	{ "info", "Print registers (info r) or watchpoints (info w)", cmd_info },
 	{ "x", "Scan memory: x N EXPR", cmd_x },
 	{ "p", "Evaluate the expression: p EXPR", cmd_p },
+	{ "w", "Set a watchpoint: w EXPR", cmd_w },
+	{ "d", "Delete a watchpoint: d N", cmd_d },
 
 };
 

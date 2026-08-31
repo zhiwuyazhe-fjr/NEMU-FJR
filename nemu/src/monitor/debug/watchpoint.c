@@ -22,20 +22,22 @@ void init_wp_pool() {
 	free_ = wp_pool;
 }
 
-/* 从free_链表头摘一个节点挂到head上 */
+/* TODO: Implement the functionality of watchpoint */
+
 WP* new_wp() {
 	Assert(free_ != NULL, "watchpoint pool is exhausted");
 
+	/* take one node from the head of the free list */
 	WP *wp = free_;
 	free_ = free_->next;
 
+	/* insert it into the used list */
 	wp->next = head;
 	head = wp;
 
 	return wp;
 }
 
-/* 从head链表摘下来还给free_ */
 void free_wp(WP *wp) {
 	Assert(wp != NULL, "free a NULL watchpoint");
 
@@ -53,11 +55,37 @@ void free_wp(WP *wp) {
 	free_ = wp;
 }
 
-/* 按编号找正在使用的监视点 */
 WP* find_wp(int no) {
 	WP *wp;
 	for(wp = head; wp != NULL; wp = wp->next) {
 		if(wp->NO == no) { return wp; }
 	}
 	return NULL;
+}
+
+void check_wp(void) {
+	WP *wp;
+	for(wp = head; wp != NULL; wp = wp->next) {
+		bool success = true;
+		uint32_t new_val = expr(wp->expr, &success);
+		if(!success) { continue; }
+		if(new_val != wp->old_val) {
+			printf("\nHint watchpoint %d at address 0x%08x\n", wp->NO, cpu.eip);
+			printf("old value = 0x%08x\n", wp->old_val);
+			printf("new value = 0x%08x\n", new_val);
+			wp->old_val = new_val;
+			nemu_state = STOP;
+		}
+	}
+}
+
+void print_wp(void) {
+	if(head == NULL) {
+		printf("No watchpoints.\n");
+		return;
+	}
+	WP *wp;
+	for(wp = head; wp != NULL; wp = wp->next) {
+		printf("%d\t%s\t0x%08x\n", wp->NO, wp->expr, wp->old_val);
+	}
 }
