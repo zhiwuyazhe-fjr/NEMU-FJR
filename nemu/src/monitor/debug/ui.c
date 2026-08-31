@@ -36,6 +36,59 @@ static int cmd_q(char *args) {
 	return -1;
 }
 
+static int cmd_si(char *args) {
+	int n = 1;
+	if(args != NULL) {
+		sscanf(args, "%d", &n);
+	}
+	if(n <= 0) {
+		printf("Usage: si [N], N should be positive\n");
+		return 0;
+	}
+	cpu_exec(n);
+	return 0;
+}
+
+static int cmd_info(char *args) {
+	char *arg = strtok(NULL, " ");
+
+	if(arg == NULL) {
+		printf("Usage: info r\n");
+		return 0;
+	}
+
+	if(strcmp(arg, "r") == 0) {
+		int i;
+		for(i = R_EAX; i <= R_EDI; i ++) {
+			printf("%s\t0x%08x\t%u\n", regsl[i], reg_l(i), reg_l(i));
+		}
+		printf("eip\t0x%08x\n", cpu.eip);
+	}
+	else {
+		printf("Unknown argument '%s'\n", arg);
+	}
+
+	return 0;
+}
+
+/* 简化版: 第二个参数只支持十六进制地址 */
+static int cmd_x(char *args) {
+	int n;
+	uint32_t addr;
+	if(args == NULL || sscanf(args, "%d %x", &n, &addr) != 2) {
+		printf("Usage: x N ADDR\n");
+		return 0;
+	}
+
+	printf("0x%08x:", addr);
+	int i;
+	for(i = 0; i < n; i ++) {
+		printf("  0x%08x", swaddr_read(addr + i * 4, 4));
+	}
+	printf("\n");
+	return 0;
+}
+
 static int cmd_help(char *args);
 
 static struct {
@@ -46,8 +99,9 @@ static struct {
 	{ "help", "Display informations about all supported commands", cmd_help },
 	{ "c", "Continue the execution of the program", cmd_c },
 	{ "q", "Exit NEMU", cmd_q },
-
-	/* TODO: Add more commands */
+	{ "si", "Step N instructions, si [N]", cmd_si },
+	{ "info", "Print registers: info r", cmd_info },
+	{ "x", "Scan memory: x N ADDR", cmd_x },
 
 };
 
