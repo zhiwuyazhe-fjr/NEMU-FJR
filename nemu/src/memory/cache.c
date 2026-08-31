@@ -5,9 +5,12 @@
 #include "burst.h"
 #include "misc.h"
 
-/* Simulate an L1 cache:
- *   64B block, 64KB in total, 8-way set associative, random
- *   replacement, write through, not write allocate.
+/* Simulate a two level cache hierarchy:
+ *   L1: 64B block, 64KB, 8-way, random replacement,
+ *       write through, not write allocate.
+ *   L2: 64B block, 4MB, 16-way, valid + dirty bits,
+ *       random replacement, write back, write allocate.
+ * L1 misses are serviced by L2, and only L2 misses reach the DRAM.
  */
 
 uint32_t dram_read(hwaddr_t, size_t);
@@ -15,13 +18,23 @@ void dram_write(hwaddr_t, size_t, uint32_t);
 
 uint64_t mem_cycles = 0;
 
+#define CACHE_MASK (CACHE_BLOCK_SIZE - 1)
+
 typedef struct {
 	uint8_t block[CACHE_BLOCK_SIZE];
 	uint32_t tag;
 	bool valid;
 } L1_cache_line;
 
+typedef struct {
+	uint8_t block[CACHE_BLOCK_SIZE];
+	uint32_t tag;
+	bool valid;
+	bool dirty;
+} L2_cache_line;
+
 static L1_cache_line l1_cache[L1_NR_SET][L1_ASSOCIATIVITY];
+static L2_cache_line l2_cache[L2_NR_SET][L2_ASSOCIATIVITY];
 
 void init_cache() {
 	int i, j;
@@ -30,12 +43,101 @@ void init_cache() {
 			l1_cache[i][j].valid = false;
 		}
 	}
+	for(i = 0; i < L2_NR_SET; i ++) {
+		for(j = 0; j < L2_ASSOCIATIVITY; j ++) {
+			l2_cache[i][j].valid = false;
+			l2_cache[i][j].dirty = false;
+		}
+	}
 }
 
-#define CACHE_MASK (CACHE_BLOCK_SIZE - 1)
+/* ------- L2 ------- */
+
+static void l2_write_back(int set, int way) {
+	/* write the dirty block of L2 back to the DRAM */
+	uint32_t block_addr = l2_cache[set][way].tag * L2_NR_SET * CACHE_BLOCK_SIZE
+		+ set * CACHE_BLOCK_SIZE;
+	int k;
+	for(k = 0; k < CACHE_BLOCK_SIZE / 4; k ++) {
+		uint32_t data;
+		memcpy(&data, l2_cache[set][way].block + k * 4, 4);
+		dram_write(block_addr + k * 4, 4, data);
+	}
+	l2_cache[set][way].dirty = false;
+}
+
+static void l2_fill_block(hwaddr_t addr, void *buf) {
+	uint32_t block_nr = addr / CACHE_BLOCK_SIZE;
+	uint32_t set = block_nr % L2_NR_SET;
+	uint32_t tag = block_nr / L2_NR_SET;
+
+	int i, way = -1;
+	for(i = 0; i < L2_ASSOCIATIVITY; i ++) {
+		if(l2_cache[set][i].valid && l2_cache[set][i].tag == tag) {
+			way = i;
+			break;
+		}
+	}
+
+	if(way < 0) {
+		/* miss: pick a victim randomly, write it back if dirty,
+		 * then load the block from the DRAM */
+		way = rand() % L2_ASSOCIATIVITY;
+		if(l2_cache[set][way].valid && l2_cache[set][way].dirty) {
+			l2_write_back(set, way);
+		}
+
+		uint32_t block_addr = addr & ~CACHE_MASK;
+		int k;
+		for(k = 0; k < CACHE_BLOCK_SIZE / 4; k ++) {
+			*(uint32_t *)(l2_cache[set][way].block + k * 4)
+				= dram_read(block_addr + k * 4, 4);
+		}
+		l2_cache[set][way].valid = true;
+		l2_cache[set][way].tag = tag;
+	}
+
+	memcpy(buf, l2_cache[set][way].block, CACHE_BLOCK_SIZE);
+}
+
+static void l2_write_block(hwaddr_t addr, uint8_t *bytes, size_t len) {
+	/* write allocate: the block is brought into L2 on a miss */
+	uint32_t block_nr = addr / CACHE_BLOCK_SIZE;
+	uint32_t set = block_nr % L2_NR_SET;
+	uint32_t tag = block_nr / L2_NR_SET;
+
+	int i, way = -1;
+	for(i = 0; i < L2_ASSOCIATIVITY; i ++) {
+		if(l2_cache[set][i].valid && l2_cache[set][i].tag == tag) {
+			way = i;
+			break;
+		}
+	}
+
+	if(way < 0) {
+		way = rand() % L2_ASSOCIATIVITY;
+		if(l2_cache[set][way].valid && l2_cache[set][way].dirty) {
+			l2_write_back(set, way);
+		}
+
+		uint32_t block_addr = addr & ~CACHE_MASK;
+		int k;
+		for(k = 0; k < CACHE_BLOCK_SIZE / 4; k ++) {
+			*(uint32_t *)(l2_cache[set][way].block + k * 4)
+				= dram_read(block_addr + k * 4, 4);
+		}
+		l2_cache[set][way].valid = true;
+		l2_cache[set][way].tag = tag;
+	}
+
+	memcpy(l2_cache[set][way].block + (addr & CACHE_MASK), bytes, len);
+	l2_cache[set][way].dirty = true;
+}
+
+/* ------- L1 ------- */
 
 static void l1_fill_block(hwaddr_t addr, void *buf) {
-	/* bring the block which contains addr into the cache,
+	/* bring the block which contains addr into L1,
 	 * and copy the whole block out */
 	uint32_t block_nr = addr / CACHE_BLOCK_SIZE;
 	uint32_t set = block_nr % L1_NR_SET;
@@ -50,14 +152,9 @@ static void l1_fill_block(hwaddr_t addr, void *buf) {
 	}
 
 	if(way < 0) {
-		/* miss: pick a victim randomly and load the block */
+		/* miss: pick a victim randomly and load the block from L2 */
 		way = rand() % L1_ASSOCIATIVITY;
-		uint32_t block_addr = addr & ~CACHE_MASK;
-		int k;
-		for(k = 0; k < CACHE_BLOCK_SIZE / 4; k ++) {
-			*(uint32_t *)(l1_cache[set][way].block + k * 4)
-				= dram_read(block_addr + k * 4, 4);
-		}
+		l2_fill_block(addr, l1_cache[set][way].block);
 		l1_cache[set][way].valid = true;
 		l1_cache[set][way].tag = tag;
 
@@ -89,12 +186,10 @@ uint32_t cache_read(hwaddr_t addr, size_t len) {
 }
 
 static void l1_write_block(hwaddr_t addr, uint8_t *bytes, size_t len) {
-	/* write through: the data always goes to the DRAM */
-	uint32_t data;
-	memcpy(&data, bytes, 4);
-	dram_write(addr, len, data);
+	/* write through: the data always goes into L2 */
+	l2_write_block(addr, bytes, len);
 
-	/* update the cached copy if the block is already in the cache */
+	/* update the cached copy if the block is already in L1 */
 	uint32_t block_nr = addr / CACHE_BLOCK_SIZE;
 	uint32_t set = block_nr % L1_NR_SET;
 	uint32_t tag = block_nr / L1_NR_SET;
@@ -106,7 +201,7 @@ static void l1_write_block(hwaddr_t addr, uint8_t *bytes, size_t len) {
 			break;
 		}
 	}
-	/* not write allocate: nothing to do on a miss */
+	/* not write allocate: nothing to do on an L1 miss */
 }
 
 void cache_write(hwaddr_t addr, size_t len, uint32_t data) {
