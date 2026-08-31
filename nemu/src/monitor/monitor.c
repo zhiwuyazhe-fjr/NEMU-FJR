@@ -87,6 +87,9 @@ void restart() {
 	/* Set the initial instruction pointer. */
 	cpu.eip = ENTRY_START;
 
+	/* The initial value of EFLAGS after reset (i386 manual, chapter 10). */
+	cpu.eflags.val = 0x0002;
+
 	/* Initialize DRAM. */
 	init_ddr3();
 }
