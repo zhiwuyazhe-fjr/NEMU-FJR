@@ -25,12 +25,12 @@ make_helper(rep) {
 				|| ops_decoded.opcode == 0xaf	// scasw
 				);
 
-			/* TODO: Jump out of the while loop if necessary. */
-			/*if((ops_decoded.opcode == 0xa6	// cmpsb
+			/* repe: stop when the comparison is not equal */
+			if((ops_decoded.opcode == 0xa6	// cmpsb
 						|| ops_decoded.opcode == 0xa7	// cmpsw
 			   ) && !cpu.eflags.ZF) {
 				break;
-			}*/
+			}
 
 		}
 		len = 1;

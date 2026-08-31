@@ -4,6 +4,7 @@
 #include "data-mov/xchg.h"
 #include "data-mov/movext.h"
 #include "data-mov/cltd.h"
+#include "data-mov/leave.h"
 #include "data-mov/push.h"
 #include "data-mov/pop.h"
 
@@ -40,6 +41,7 @@
 #include "string/scas.h"
 #include "string/stos.h"
 #include "string/movs.h"
+#include "string/lods.h"
 
 #include "misc/misc.h"
 
