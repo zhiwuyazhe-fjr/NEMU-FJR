@@ -1,4 +1,5 @@
 #include "nemu.h"
+#include "memory/cache.h"
 
 #define ENTRY_START 0x100000
 
@@ -90,6 +91,7 @@ void restart() {
 	/* The initial value of EFLAGS after reset (i386 manual, chapter 10). */
 	cpu.eflags.val = 0x0002;
 
-	/* Initialize DRAM. */
+	/* Initialize DRAM and the cache. */
 	init_ddr3();
+	init_cache();
 }
