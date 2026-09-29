@@ -24,4 +24,43 @@ typedef struct SegmentDescriptor {
 /* load the visible part and the descriptor cache of a segment register */
 void load_sreg(uint8_t sreg_id, uint16_t sel);
 
+/* 32-bit x86 uses 4KB pages. */
+#define PAGE_SIZE 4096
+#define PAGE_MASK (PAGE_SIZE - 1)
+#define NR_PDE    1024
+#define NR_PTE    1024
+
+/* the first-level page table (page directory) entry */
+typedef union PageDirectoryEntry {
+	struct {
+		uint32_t present             : 1;
+		uint32_t read_write          : 1;
+		uint32_t user_supervisor     : 1;
+		uint32_t page_write_through  : 1;
+		uint32_t page_cache_disable  : 1;
+		uint32_t accessed            : 1;
+		uint32_t pad0                : 6;
+		uint32_t page_frame          : 20;
+	};
+	uint32_t val;
+} PDE;
+
+/* the second-level page table entry */
+typedef union PageTableEntry {
+	struct {
+		uint32_t present             : 1;
+		uint32_t read_write          : 1;
+		uint32_t user_supervisor     : 1;
+		uint32_t page_write_through  : 1;
+		uint32_t page_cache_disable  : 1;
+		uint32_t accessed            : 1;
+		uint32_t dirty               : 1;
+		uint32_t pad0                : 1;
+		uint32_t global              : 1;
+		uint32_t pad1                : 3;
+		uint32_t page_frame          : 20;
+	};
+	uint32_t val;
+} PTE;
+
 #endif

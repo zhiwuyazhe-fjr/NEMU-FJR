@@ -43,12 +43,27 @@ uint32_t loader() {
 		/* Scan the program header table, load each segment into memory */
 		if(ph->p_type == PT_LOAD) {
 
+#ifdef IA32_PAGE
+			/* The program will run on paging: p_vaddr is a virtual
+			 * address outside the kernel's address space, so allocate
+			 * physical memory for it and set up its page tables first.
+			 * mm_malloc() returns the physical base, which is also a
+			 * valid kernel virtual address through the identity
+			 * mapping below 0xc0000000. */
+			uint32_t pa = mm_malloc(ph->p_vaddr, ph->p_memsz);
+
+			/* copy the segment content to [VirtAddr, VirtAddr + FileSiz) */
+			ramdisk_read((uint8_t *)pa, ph->p_offset, ph->p_filesz);
+
+			/* zero the memory region [VirtAddr + FileSiz, VirtAddr + MemSiz) */
+			memset((uint8_t *)pa + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
+#else
 			/* copy the segment content to [VirtAddr, VirtAddr + FileSiz) */
 			ramdisk_read((uint8_t *)ph->p_vaddr, ph->p_offset, ph->p_filesz);
 
 			/* zero the memory region [VirtAddr + FileSiz, VirtAddr + MemSiz) */
 			memset((uint8_t *)ph->p_vaddr + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
-
+#endif
 
 #ifdef IA32_PAGE
 			/* Record the program break for future use. */

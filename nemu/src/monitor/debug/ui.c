@@ -2,6 +2,7 @@
 #include "monitor/expr.h"
 #include "monitor/watchpoint.h"
 #include "nemu.h"
+#include "cpu/mmu.h"
 
 #include <stdlib.h>
 #include <readline/readline.h>
@@ -183,6 +184,39 @@ static int cmd_bt(char *args) {
 	return 0;
 }
 
+/* print the page-level translation result of ADDR */
+static int cmd_page(char *args) {
+	if(args == NULL) {
+		printf("Usage: page ADDR\n");
+		return 0;
+	}
+
+	bool success = false;
+	uint32_t addr = expr(args, &success);
+	if(!success) {
+		printf("bad expression\n");
+		return 0;
+	}
+
+	if(!(cpu.cr0.protect_enable && cpu.cr0.paging)) {
+		printf("paging is not enabled\n");
+		return 0;
+	}
+
+	hwaddr_t pa;
+	int ret = page_translate_query(addr, &pa);
+	if(ret == 0) {
+		printf("va:0x%08x -> pa:0x%08x (pde_idx:%03x pte_idx:%03x offset:%03x)\n",
+				addr, pa, addr >> 22, (addr >> 12) & 0x3ff, addr & PAGE_MASK);
+	}
+	else {
+		printf("va:0x%08x: page translation failed "
+				"(present bit of the %s is 0)\n", addr,
+				ret == 1 ? "page directory entry" : "page table entry");
+	}
+	return 0;
+}
+
 static int cmd_help(char *args);
 
 static struct {
@@ -200,6 +234,7 @@ static struct {
 	{ "w", "Set a watchpoint: w EXPR", cmd_w },
 	{ "d", "Delete a watchpoint: d N", cmd_d },
 	{ "bt", "Print the stack frame chain", cmd_bt },
+	{ "page", "Print page translation result: page ADDR", cmd_page },
 
 };
 

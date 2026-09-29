@@ -29,4 +29,16 @@ void hwaddr_write(hwaddr_t, size_t, uint32_t);
  * sreg is the encoding of the segment register to use. */
 lnaddr_t seg_translate(swaddr_t addr, size_t len, uint8_t sreg);
 
+/* Page translation: linear address -> physical address, performed by a
+ * page walk starting from CR3 (with the TLB in front of it).  Only used
+ * when both CR0.PE and CR0.PG are set.  addr must not cross a page
+ * boundary; lnaddr_read()/lnaddr_write() split such accesses before
+ * calling this. */
+hwaddr_t page_translate(lnaddr_t addr);
+
+/* The query version used by the `page' command in the monitor:
+ * on success stores the physical address and returns 0, otherwise
+ * returns a nonzero value without terminating NEMU. */
+int page_translate_query(lnaddr_t addr, hwaddr_t *pa);
+
 #endif

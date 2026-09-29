@@ -2,6 +2,7 @@
 #include "cpu/decode/modrm.h"
 #include "cpu/reg.h"
 #include "cpu/mmu.h"
+#include "memory/tlb.h"
 
 static const char *sregs [] = {"es", "cs", "ss", "ds"};
 
@@ -92,7 +93,14 @@ make_helper(mov_rm2cr) {
 
 	switch(m.reg) {
 		case 0: cpu.cr0.val = rm.val; break;
-		case 3: cpu.cr3.val = rm.val; break;
+		case 3:
+			/* CR3 points to the page directory of the current address
+			 * space; updating it must invalidate every cached
+			 * translation, or a stale mapping of another address space
+			 * would still be used. */
+			cpu.cr3.val = rm.val;
+			tlb_flush();
+			break;
 		default: Assert(0, "unsupported control register CR%d", m.reg);
 	}
 
