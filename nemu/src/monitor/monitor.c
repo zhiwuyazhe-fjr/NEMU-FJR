@@ -91,6 +91,25 @@ void restart() {
 	/* The initial value of EFLAGS after reset (i386 manual, chapter 10). */
 	cpu.eflags.val = 0x0002;
 
+	/* Enter the real mode on reset: segmentation and paging are off. */
+	cpu.cr0.val = 0;
+	cpu.cr3.val = 0;
+	cpu.gdtr.base = 0;
+	cpu.gdtr.limit = 0;
+
+	/* IA-32 forbids loading CS with mov, but instruction fetching needs
+	 * CS right after CR0.PE is set.  Initialize the descriptor cache of
+	 * every segment register as a flat mapping (base = 0, limit = 4G),
+	 * so that setting PE alone does not change any address. */
+	{
+		int i;
+		for(i = R_ES; i < NR_SREG; i ++) {
+			cpu.sreg[i].sel = 0;
+			cpu.sreg[i].base = 0;
+			cpu.sreg[i].limit = 0xffffffff;
+		}
+	}
+
 	/* Initialize DRAM and the cache. */
 	init_ddr3();
 	init_cache();

@@ -15,6 +15,9 @@ typedef struct {
 		int32_t simm;
 	};
 	uint32_t val;
+	/* the segment register this memory operand is bundled with,
+	 * decided by the default segment selection rule of i386 */
+	uint8_t sreg;
 	char str[OP_STR_SIZE];
 } Operand;
 

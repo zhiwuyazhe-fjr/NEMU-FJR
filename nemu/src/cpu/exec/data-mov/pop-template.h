@@ -3,7 +3,7 @@
 #define instr pop
 
 static void do_execute() {
-	DATA_TYPE val = swaddr_read(reg_l(R_ESP), DATA_BYTE);
+	DATA_TYPE val = swaddr_read(reg_l(R_ESP), DATA_BYTE, R_SS);
 	reg_l(R_ESP) += DATA_BYTE;
 	OPERAND_W(op_src, val);
 

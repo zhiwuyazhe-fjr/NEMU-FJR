@@ -18,7 +18,7 @@ make_helper_v(push_rm)
 make_helper(push_si_v) {
 	int len = decode_si_b(eip + 1);
 	reg_l(R_ESP) -= 4;
-	swaddr_write(reg_l(R_ESP), 4, op_src->val);
+	swaddr_write(reg_l(R_ESP), 4, op_src->val, R_SS);
 
 	print_asm("pushl $0x%x", op_src->val);
 	return 1 + len;

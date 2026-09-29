@@ -4,7 +4,7 @@
 
 static void do_execute() {
 	reg_l(R_ESP) -= DATA_BYTE;
-	swaddr_write(reg_l(R_ESP), DATA_BYTE, op_src->val);
+	swaddr_write(reg_l(R_ESP), DATA_BYTE, op_src->val, R_SS);
 
 	print_asm_template1();
 }

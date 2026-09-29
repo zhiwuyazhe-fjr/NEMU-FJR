@@ -17,11 +17,16 @@ extern uint8_t *hw_mem;
 	hwa_to_va(addr); \
 })
 
-uint32_t swaddr_read(swaddr_t, size_t);
+uint32_t swaddr_read(swaddr_t, size_t, uint8_t sreg);
 uint32_t lnaddr_read(lnaddr_t, size_t);
 uint32_t hwaddr_read(hwaddr_t, size_t);
-void swaddr_write(swaddr_t, size_t, uint32_t);
+void swaddr_write(swaddr_t, size_t, uint32_t, uint8_t sreg);
 void lnaddr_write(lnaddr_t, size_t, uint32_t);
 void hwaddr_write(hwaddr_t, size_t, uint32_t);
+
+/* Segment translation: virtual address -> linear address.
+ * In the real mode (CR0.PE = 0) it is the identity mapping.
+ * sreg is the encoding of the segment register to use. */
+lnaddr_t seg_translate(swaddr_t addr, size_t len, uint8_t sreg);
 
 #endif

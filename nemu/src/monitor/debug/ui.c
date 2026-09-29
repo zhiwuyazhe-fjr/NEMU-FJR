@@ -102,7 +102,7 @@ static int cmd_x(char *args) {
 	printf("0x%08x:", base);
 	int i;
 	for(i = 0; i < n; i ++) {
-		printf("  0x%08x", swaddr_read(base + i * 4, 4));
+		printf("  0x%08x", swaddr_read(base + i * 4, 4, R_DS));
 	}
 	printf("\n");
 	return 0;
@@ -172,12 +172,12 @@ static int cmd_bt(char *args) {
 	int i;
 
 	for(i = 0; ebp != 0 && i < 32; i ++) {
-		uint32_t prev_ebp = swaddr_read(ebp, 4);
-		uint32_t ret_addr = swaddr_read(ebp + 4, 4);
+		uint32_t prev_ebp = swaddr_read(ebp, 4, R_SS);
+		uint32_t ret_addr = swaddr_read(ebp + 4, 4, R_SS);
 		func_name(ret_addr - 1, name);
 		printf("#%d 0x%08x in %s (0x%08x, 0x%08x, 0x%08x, 0x%08x)\n", i, ret_addr, name,
-				swaddr_read(ebp + 8, 4), swaddr_read(ebp + 12, 4),
-				swaddr_read(ebp + 16, 4), swaddr_read(ebp + 20, 4));
+				swaddr_read(ebp + 8, 4, R_SS), swaddr_read(ebp + 12, 4, R_SS),
+				swaddr_read(ebp + 16, 4, R_SS), swaddr_read(ebp + 20, 4, R_SS));
 		ebp = prev_ebp;
 	}
 	return 0;

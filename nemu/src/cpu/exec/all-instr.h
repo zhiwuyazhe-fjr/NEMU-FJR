@@ -26,6 +26,7 @@
 #include "control/jcc.h"
 #include "control/setcc.h"
 #include "control/ret.h"
+#include "control/ljmp.h"
 
 #include "logic/and.h"
 #include "logic/or.h"
@@ -45,6 +46,7 @@
 #include "string/lods.h"
 
 #include "misc/misc.h"
+#include "misc/system.h"
 
 #include "special/special.h"
 

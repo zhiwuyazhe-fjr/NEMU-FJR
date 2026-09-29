@@ -255,7 +255,7 @@ static uint32_t eval(int p, int q, bool *success) {
 			if(*success == false) { return 0; }
 			switch(tokens[p].type) {
 				case NEG: return -val;
-				case TK_DEREF: return swaddr_read(val, 4);
+				case TK_DEREF: return swaddr_read(val, 4, R_DS);
 				default: return !val;
 			}
 		}

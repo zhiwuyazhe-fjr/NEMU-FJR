@@ -5,7 +5,7 @@
 static void do_execute() {
 	/* the return address is the instruction after the call */
 	DATA_TYPE ret_addr = cpu.eip + 1 + DATA_BYTE;
-	swaddr_write(reg_l(R_ESP) - 4, 4, ret_addr);
+	swaddr_write(reg_l(R_ESP) - 4, 4, ret_addr, R_SS);
 	reg_l(R_ESP) -= 4;
 
 	cpu.eip += op_src->val;
@@ -17,7 +17,7 @@ make_instr_helper(si)
 #if DATA_BYTE == 4
 make_helper(call_rm_l) {
 	int len = decode_rm_l(eip + 1);
-	swaddr_write(reg_l(R_ESP) - 4, 4, cpu.eip + len + 1);
+	swaddr_write(reg_l(R_ESP) - 4, 4, cpu.eip + len + 1, R_SS);
 	reg_l(R_ESP) -= 4;
 
 	cpu.eip = op_src->val - len - 1;
